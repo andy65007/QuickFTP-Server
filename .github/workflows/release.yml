@@ -1,0 +1,88 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build .NET edition
+        shell: pwsh
+        run: |
+          Set-Location dotnet
+          ./build.ps1
+
+      - name: Install Rust 1.77.2 GNU toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.77.2-x86_64-pc-windows-gnu --profile minimal
+          rustup target add i686-pc-windows-gnu --toolchain 1.77.2-x86_64-pc-windows-gnu
+
+      - name: Install 32-bit MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          update: false
+          install: mingw-w64-i686-gcc
+
+      - name: Build Rust edition (x64 + x86)
+        shell: pwsh
+        env:
+          RUSTUP_TOOLCHAIN: 1.77.2-x86_64-pc-windows-gnu
+        run: |
+          $env:PATH = "C:\msys64\mingw32\bin;$env:PATH"
+          ./rust/build.ps1
+
+      - name: Prepare release files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+
+          Copy-Item dotnet/dist/QuickFTP.exe release/QuickFTP-DotNET.exe
+          Copy-Item dotnet/README.md release/QuickFTP-DotNET-README.zh-CN.md
+          Copy-Item dotnet/README.en.md release/QuickFTP-DotNET-README.md
+          Compress-Archive -LiteralPath @(
+            "release/QuickFTP-DotNET.exe",
+            "release/QuickFTP-DotNET-README.md",
+            "release/QuickFTP-DotNET-README.zh-CN.md"
+          ) -DestinationPath release/QuickFTP-DotNET-win.zip -Force
+
+          Copy-Item rust/dist/QuickFTP-Rust-x64.exe release/QuickFTP-Rust-x64.exe
+          Copy-Item rust/dist/QuickFTP-Rust-x64.exe.manifest release/QuickFTP-Rust-x64.exe.manifest
+          Copy-Item rust/dist/QuickFTP-Rust-x86.exe release/QuickFTP-Rust-x86.exe
+          Copy-Item rust/dist/QuickFTP-Rust-x86.exe.manifest release/QuickFTP-Rust-x86.exe.manifest
+          Copy-Item rust/dist/QuickFTP-Rust-portable.zip release/QuickFTP-Rust-portable.zip
+          Copy-Item rust/README.md release/QuickFTP-Rust-README.zh-CN.md
+          Copy-Item rust/README.en.md release/QuickFTP-Rust-README.md
+          Copy-Item .github/release-notes.md release/RELEASE_NOTES.md
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickFTP-Windows
+          path: release/*
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $assets = Get-ChildItem release -File |
+            Where-Object { $_.Name -ne "RELEASE_NOTES.md" } |
+            ForEach-Object { $_.FullName }
+          gh release create "$env:GITHUB_REF_NAME" @assets `
+            --title "QuickFTP Server $env:GITHUB_REF_NAME" `
+            --notes-file release/RELEASE_NOTES.md

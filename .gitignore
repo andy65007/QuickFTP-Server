@@ -1,0 +1,42 @@
+# Build outputs
+dotnet/dist/
+rust/dist/
+rust/target/
+**/bin/
+**/obj/
+
+# Local build toolchains
+rust/.rustup/
+rust/.cargo/
+rust/tools/
+
+# Binaries and archives
+*.exe
+*.dll
+*.zip
+*.7z
+*.tar.xz
+
+# Local settings (may contain account names or DPAPI ciphertext)
+settings.ini
+quickftp-rust.ini
+
+# Original macOS artifact and extracted metadata
+QuickFTP.app/
+__MACOSX/
+
+# Session logs and temporary files
+codex-session-*.md
+.tmp/
+handoff/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vs/
+.idea/
+
+# Codex/agent local files
+.agents/
+.codex/
+.aws/
