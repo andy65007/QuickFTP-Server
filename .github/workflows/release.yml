@@ -30,18 +30,31 @@ jobs:
           rustup target add i686-pc-windows-gnu --toolchain 1.77.2-x86_64-pc-windows-gnu
 
       - name: Install 32-bit MinGW
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW32
-          update: false
-          install: mingw-w64-i686-gcc
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "mingw32.7z"
+          Invoke-WebRequest `
+            -Uri "https://github.com/niXman/mingw-builds-binaries/releases/download/16.2.0-rt_v14-rev1/i686-16.2.0-release-posix-dwarf-msvcrt-rt_v14-rev1.7z" `
+            -OutFile $archive `
+            -UseBasicParsing
+          $sevenZip = "C:\Program Files\7-Zip\7z.exe"
+          if (-not (Test-Path -LiteralPath $sevenZip)) {
+            $sevenZip = (Get-Command 7z.exe -ErrorAction Stop).Source
+          }
+          & $sevenZip x $archive "-o$env:RUNNER_TEMP\mingw32" -y | Out-Null
+          $gcc = Get-ChildItem "$env:RUNNER_TEMP\mingw32" -Recurse -Filter "i686-w64-mingw32-gcc.exe" |
+            Select-Object -First 1
+          if ($null -eq $gcc) {
+            throw "i686 MinGW compiler not found after extraction."
+          }
+          "MINGW_BIN=$($gcc.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build Rust edition (x64 + x86)
         shell: pwsh
         env:
           RUSTUP_TOOLCHAIN: 1.77.2-x86_64-pc-windows-gnu
         run: |
-          $env:PATH = "C:\msys64\mingw32\bin;$env:PATH"
+          $env:PATH = "$env:MINGW_BIN;$env:PATH"
           ./rust/build.ps1
 
       - name: Prepare release files
